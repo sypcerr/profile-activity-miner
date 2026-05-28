@@ -2,8 +2,12 @@ name: Run Pixel Miner
 
 on:
   schedule:
-    - cron: "0 */12 * * *" # Läuft vollautomatisch alle 12 Stunden
-  workflow_dispatch: # Erlaubt es dir, den Miner jederzeit manuell zu starten
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+# Das hier schaltet die Schreibrechte für die Action frei:
+permissions:
+  contents: write
 
 jobs:
   mine:
