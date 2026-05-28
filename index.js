@@ -1,8 +1,70 @@
 const fs = require('fs');
 
-function generateTrueMiningSVG() {
+async function getContributions() {
+    // Holt das Token und den Usernamen automatisch aus der GitHub-Umgebung
+    const token = process.env.GITHUB_TOKEN;
+    const username = process.env.GITHUB_REPOSITORY.split('/')[0];
+
+    const query = {
+        query: `query {
+            user(login: "${username}") {
+                contributionsCollection {
+                    contributionCalendar {
+                        weeks {
+                            contributionDays {
+                                contributionLevel
+                            }
+                        }
+                    }
+                }
+            }
+        }`
+    };
+
+    const response = await fetch('https://api.github.com/graphql', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(query)
+    });
+
+    const resData = await response.json();
+    
+    if (!resData.data || !resData.data.user) {
+        throw new Error('Fehler beim Abrufen der GitHub API-Daten. Überprüfe die Berechtigungen.');
+    }
+
+    const weeks = resData.data.user.contributionsCollection.contributionCalendar.weeks;
+    
+    // GitHub liefert das Level als Text. Wir mappen das auf Zahlen von 0 bis 4.
+    const levelMap = {
+        'NONE': 0,
+        'FIRST_QUARTILE': 1,
+        'SECOND_QUARTILE': 2,
+        'THIRD_QUARTILE': 3,
+        'FOURTH_QUARTILE': 4
+    };
+
+    // Erstelle das 53x7 Raster basierend auf den echten Daten
+    let matrix = [];
+    weeks.forEach(week => {
+        let weekDays = week.contributionDays.map(day => levelMap[day.contributionLevel]);
+        // Falls eine Woche unvollständig ist (z.B. die aktuelle Woche), mit Nullen auffüllen
+        while (weekDays.length < 7) {
+            weekDays.push(0);
+        }
+        matrix.push(weekDays);
+    });
+
+    // Sicherstellen, dass wir exakt 53 Spalten für das Grid haben
+    return matrix.slice(-53);
+}
+
+function generateTrueMiningSVG(data) {
     const rows = 7;
-    const cols = 53;
+    const cols = data.length; // Dynamisch basierend auf echten Wochen (meist 53)
     const boxSize = 10;
     const gap = 3;
     const paddingLeft = 10;
@@ -22,22 +84,17 @@ function generateTrueMiningSVG() {
     let gridSVG = '';
     let styles = '';
 
-    // Generiere ein volles 53x7 Raster mit zufälligen Erz-Stufen (wie echte Commits)
     for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
             const xPos = paddingLeft + x * (boxSize + gap);
             const yPos = paddingTop + y * (boxSize + gap);
             
-            // Zufällige Verteilung für den Look
-            const rand = Math.random();
-            const level = rand > 0.85 ? 4 : rand > 0.7 ? 3 : rand > 0.5 ? 2 : rand > 0.2 ? 1 : 0;
+            const level = data[x][y] || 0;
             const color = colors[level];
 
-            // Jede Spalte bekommt eine eigene Verzögerung basierend auf der Laufzeit des Miners
-            // Der Miner braucht 30 Sekunden für den gesamten Weg (53 Spalten)
+            // Timing der Zerstörung berechnen (30 Sekunden Gesamtlaufzeit des Miners)
             const delay = (x / cols) * 30;
 
-            // CSS-Animation für das exakte Zerstören und Respawnen dieses spezifischen Blocks
             styles += `
                 .block-${x}-${y} {
                     animation: breakAndRespawn-${x} 30s infinite linear;
@@ -45,13 +102,9 @@ function generateTrueMiningSVG() {
                 }
                 @keyframes breakAndRespawn-${x} {
                     0% { opacity: 1; transform: scale(1); fill: ${color}; }
-                    /* Kurz bevor der Miner die Spalte erreicht */
                     ${((delay / 30) * 100).toFixed(1)}% { opacity: 1; transform: scale(1); }
-                    /* Treffer: Block explodiert/zerfällt */
                     ${(((delay + 0.2) / 30) * 100).toFixed(1)}% { opacity: 0; transform: scale(0) rotate(45deg); }
-                    /* 5 Sekunden Respawn-Dauer (5 / 30 = ~16.6% der Gesamtlaufzeit) */
                     ${(((delay + 5.2) / 30) * 100).toFixed(1)}% { opacity: 0; transform: scale(0); }
-                    /* Zurückgesetzt für den nächsten Durchlauf */
                     ${(((delay + 5.7) / 30) * 100).toFixed(1)}% { opacity: 1; transform: scale(1); }
                     100% { opacity: 1; transform: scale(1); }
                 }
@@ -103,6 +156,16 @@ function generateTrueMiningSVG() {
 </svg>`;
 }
 
-const svgContent = generateTrueMiningSVG();
-fs.writeFileSync('mining-grid.svg', svgContent);
-console.log('💎 True 53x7 Pixel Art Mining Grid generated.');
+async function main() {
+    try {
+        const commitData = await getContributions();
+        const svgContent = generateTrueMiningSVG(commitData);
+        fs.writeFileSync('mining-grid.svg', svgContent);
+        console.log('💎 Echte GitHub-Daten erfolgreich gemined!');
+    } catch (error) {
+        console.error('Fehler:', error.message);
+        process.exit(1);
+    }
+}
+
+main();
