@@ -1,23 +1,25 @@
 <div align="center">
 
-# ⛏️ Pixel Mining Simulator
+# Profile Activity Miner
 
-Stop using boring green grids. This GitHub Action hijacks your contribution heatmap and turns it into a literal 2D mining operation. A custom vector miner walks across your profile, harvesting your high-commit days like rare ores.
+The ultimate antidote to standard, boring green contribution tiles. This automated generator hooks into a full 53x7 grid layout, rendering a real-time pixel art mining simulator directly onto your profile. 
 
----
-
-## 📺 Live Preview
-
-<img src="mining-grid.svg" alt="Mining Demo" width="100%" max-width="600" style="border-radius: 10px;" />
+Watch a custom vector miner advance column by column, physically smashing your active days apart. Every broken block triggers a shatter animation and respawns cleanly after 5 seconds.
 
 ---
 
-## 📦 Setup
+## Live Preview
 
-No complex configuration needed. It runs completely automated via GitHub Actions.
+<img src="mining-grid.svg" alt="Mining Project Grid" width="100%" max-width="720" style="border-radius: 8px;" />
 
-### 1. Add the Workflow
-Create a file named `.github/workflows/mine.yml` in your profile repository and drop this inside:
+---
+
+## Installation
+
+Runs completely hands-free using GitHub Actions.
+
+### 1. Add Workflow Engine
+Drop a file into `.github/workflows/mine.yml` within your profile repository:
 
 ```yaml
 name: Run Pixel Miner
@@ -26,6 +28,9 @@ on:
   schedule:
     - cron: "0 */12 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   mine:
@@ -38,5 +43,5 @@ jobs:
       - run: node index.js
       - uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: "Miner secured more ores"
+          commit_message: "Miner extracted more resources"
           file_pattern: "mining-grid.svg"
