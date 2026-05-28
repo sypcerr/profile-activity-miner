@@ -1,97 +1,108 @@
 const fs = require('fs');
 
-const mockCommitData = [
-    [0, 1, 2, 0, 4, 1, 0],
-    [1, 0, 3, 4, 0, 2, 1],
-    [0, 0, 1, 2, 4, 0, 0],
-    [2, 3, 0, 1, 0, 4, 2],
-    [0, 1, 1, 4, 2, 0, 3]
-];
-
-function generateMiningSVG(data) {
-    const boxSize = 12;
+function generateTrueMiningSVG() {
+    const rows = 7;
+    const cols = 53;
+    const boxSize = 10;
     const gap = 3;
-    const paddingLeft = 40;
-    const paddingTop = 25;
+    const paddingLeft = 10;
+    const paddingTop = 30;
     
-    let svgWidth = data.length * (boxSize + gap) + paddingLeft + 60;
-    let svgHeight = 7 * (boxSize + gap) + paddingTop + 30;
+    const svgWidth = cols * (boxSize + gap) + paddingLeft + 20;
+    const svgHeight = rows * (boxSize + gap) + paddingTop + 30;
 
     const colors = {
-        0: '#161b22',
-        1: '#0e4429',
-        2: '#006d32',
-        3: '#26a641',
-        4: '#39d353'
+        0: '#161b22', // Leer
+        1: '#0e4429', // Stein
+        2: '#006d32', // Kupfer
+        3: '#26a641', // Gold
+        4: '#39d353'  // Diamant
     };
 
     let gridSVG = '';
+    let styles = '';
 
-    data.forEach((week, x) => {
-        week.forEach((level, y) => {
+    // Generiere ein volles 53x7 Raster mit zufälligen Erz-Stufen (wie echte Commits)
+    for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
             const xPos = paddingLeft + x * (boxSize + gap);
             const yPos = paddingTop + y * (boxSize + gap);
-            const color = colors[level] || colors[0];
             
-            let extra = '';
-            if (level === 4) {
-                extra = `style="animation: crystalGlow 2s infinite alternate;"`;
-            }
+            // Zufällige Verteilung für den Look
+            const rand = Math.random();
+            const level = rand > 0.85 ? 4 : rand > 0.7 ? 3 : rand > 0.5 ? 2 : rand > 0.2 ? 1 : 0;
+            const color = colors[level];
 
-            gridSVG += `<rect x="${xPos}" y="${yPos}" width="${boxSize}" height="${boxSize}" rx="2" fill="${color}" ${extra} />\n`;
-        });
-    });
+            // Jede Spalte bekommt eine eigene Verzögerung basierend auf der Laufzeit des Miners
+            // Der Miner braucht 30 Sekunden für den gesamten Weg (53 Spalten)
+            const delay = (x / cols) * 30;
+
+            // CSS-Animation für das exakte Zerstören und Respawnen dieses spezifischen Blocks
+            styles += `
+                .block-${x}-${y} {
+                    animation: breakAndRespawn-${x} 30s infinite linear;
+                    transform-origin: ${xPos + boxSize/2}px ${yPos + boxSize/2}px;
+                }
+                @keyframes breakAndRespawn-${x} {
+                    0% { opacity: 1; transform: scale(1); fill: ${color}; }
+                    /* Kurz bevor der Miner die Spalte erreicht */
+                    ${((delay / 30) * 100).toFixed(1)}% { opacity: 1; transform: scale(1); }
+                    /* Treffer: Block explodiert/zerfällt */
+                    ${(((delay + 0.2) / 30) * 100).toFixed(1)}% { opacity: 0; transform: scale(0) rotate(45deg); }
+                    /* 5 Sekunden Respawn-Dauer (5 / 30 = ~16.6% der Gesamtlaufzeit) */
+                    ${(((delay + 5.2) / 30) * 100).toFixed(1)}% { opacity: 0; transform: scale(0); }
+                    /* Zurückgesetzt für den nächsten Durchlauf */
+                    ${(((delay + 5.7) / 30) * 100).toFixed(1)}% { opacity: 1; transform: scale(1); }
+                    100% { opacity: 1; transform: scale(1); }
+                }
+            `;
+
+            gridSVG += `<rect class="block-${x}-${y}" x="${xPos}" y="${yPos}" width="${boxSize}" height="${boxSize}" rx="2" />\n`;
+        }
+    }
 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
     <style>
+        ${styles}
         @keyframes mineWalk {
             0% { transform: translate(0px, 0px); }
-            45% { transform: translate(${svgWidth - 90}px, 0px); }
-            50% { transform: translate(${svgWidth - 90}px, 0px) scaleX(-1); }
-            95% { transform: translate(0px, 0px) scaleX(-1); }
-            100% { transform: translate(0px, 0px) scaleX(1); }
+            95% { transform: translate(${svgWidth - 40}px, 0px); }
+            100% { transform: translate(${svgWidth - 40}px, 0px); }
         }
         @keyframes pickaxeSwing {
             0% { transform: rotate(0deg); }
-            50% { transform: rotate(-60deg); }
+            50% { transform: rotate(-70deg); }
             100% { transform: rotate(0deg); }
         }
-        @keyframes crystalGlow {
-            0% { filter: drop-shadow(0 0 1px #39d353); }
-            100% { fill: #a3ffb4; filter: drop-shadow(0 0 4px #39d353); }
-        }
         .miner-engine {
-            animation: mineWalk 20s infinite linear;
-            transform-origin: center;
+            animation: mineWalk 30s infinite linear;
         }
         .tool-swing {
-            transform-origin: 18px 25px;
-            animation: pickaxeSwing 0.6s infinite ease-in-out;
+            transform-origin: 8px 15px;
+            animation: pickaxeSwing 0.4s infinite ease-in-out;
         }
     </style>
 
-    <rect width="100%" height="100%" fill="#0d1117" rx="10" />
+    <rect width="100%" height="100%" fill="#0d1117" rx="6" />
 
     ${gridSVG}
 
     <g class="miner-engine">
-        <g transform="translate(10, ${svgHeight / 2 - 20})">
-            <rect x="15" y="20" width="16" height="22" rx="4" fill="#f1c40f" />
-            <path d="M13 20 C 13 10, 33 10, 33 20 Z" fill="#e67e22" />
-            <rect x="20" y="12" width="6" height="4" fill="#f1c40f" />
-            <polygon points="26,14 45,5 45,23" fill="#f1c40f" opacity="0.15" />
-            <rect x="15" y="42" width="6" height="4" fill="#2c3e50" />
-            <rect x="25" y="42" width="6" height="4" fill="#2c3e50" />
+        <g transform="translate(0, ${paddingTop + 15})">
+            <rect x="5" y="10" width="10" height="14" rx="2" fill="#f1c40f" />
+            <path d="M4 10 C 4 4, 16 4, 16 10 Z" fill="#e67e22" />
+            <rect x="8" y="5" width="4" height="2" fill="#f1c40f" />
+            <polygon points="12,6 35,0 35,16" fill="#f1c40f" opacity="0.15" />
             
             <g class="tool-swing">
-                <rect x="16" y="5" width="3" height="25" rx="1" fill="#795548" transform="rotate(30 16 5)" />
-                <path d="M5 4 C 12 2, 22 2, 29 4 L 17 8 Z" fill="#95a5a6" />
+                <rect x="6" y="2" width="2" height="14" rx="1" fill="#795548" transform="rotate(30 6 2)" />
+                <path d="M0 2 C 4 0, 10 0, 14 2 L 7 4 Z" fill="#95a5a6" />
             </g>
         </g>
     </g>
 </svg>`;
 }
 
-const svgContent = generateMiningSVG(mockCommitData);
+const svgContent = generateTrueMiningSVG();
 fs.writeFileSync('mining-grid.svg', svgContent);
-console.log('Pixel Miner SVG generated');
+console.log('💎 True 53x7 Pixel Art Mining Grid generated.');
