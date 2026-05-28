@@ -1,8 +1,7 @@
 const fs = require('fs');
 
-const RESPAWN_DELAY = 6;  
-const RESPAWN_FADE  = 0.3;
-const SWING_BASE    = 0.55; 
+const RESPAWN_FADE = 0.3;
+const SWING_BASE   = 0.55;
 
 function seededRand(seed) {
     let s = seed;
@@ -12,10 +11,8 @@ function seededRand(seed) {
     };
 }
 
-//GitHub Contributions via GraphQL
 async function getContributions() {
     const token    = process.env.GITHUB_TOKEN;
-
     const username = process.env.GITHUB_USERNAME || process.env.GITHUB_REPOSITORY.split('/')[0];
 
     const query = {
@@ -45,7 +42,7 @@ async function getContributions() {
 
     const resData = await response.json();
     if (!resData.data || !resData.data.user) {
-        throw new Error('API-Fehler. Überprüfe die Berechtigungen und den GITHUB_TOKEN.');
+        throw new Error('API error. Check your permissions and GITHUB_TOKEN.');
     }
 
     const weeks    = resData.data.user.contributionsCollection.contributionCalendar.weeks;
@@ -62,16 +59,13 @@ async function getContributions() {
 }
 
 function buildBlockAnimation(block, totalTime) {
-    const rand        = seededRand(block.x * 97 + block.y * 31 + block.level * 7);
-    const colors      = { 0: '#161b22', 1: '#0e4429', 2: '#006d32', 3: '#26a641', 4: '#39d353' };
-    const color       = colors[block.level];
+    const rand     = seededRand(block.x * 97 + block.y * 31 + block.level * 7);
+    const colors   = { 0: '#161b22', 1: '#0e4429', 2: '#006d32', 3: '#26a641', 4: '#39d353' };
+    const color    = colors[block.level];
 
-    const startPct    = ((block.startTime / totalTime) * 100).toFixed(2);
-    const hitPct      = ((block.endTime   / totalTime) * 100).toFixed(2);
-
-
-    const respawnAt   = totalTime - RESPAWN_FADE;
-    const respawnPct  = ((respawnAt  / totalTime) * 100).toFixed(2);
+    const startPct   = ((block.startTime / totalTime) * 100).toFixed(2);
+    const hitPct     = ((block.endTime   / totalTime) * 100).toFixed(2);
+    const respawnPct = (((totalTime - RESPAWN_FADE) / totalTime) * 100).toFixed(2);
 
     const px = (rand() * 14 - 7).toFixed(1);
     const py = (rand() * 12 + 8).toFixed(1);
@@ -83,9 +77,9 @@ function buildBlockAnimation(block, totalTime) {
             transform-origin: ${block.xPos + 5}px ${block.yPos + 5}px;
         }
         @keyframes break-${block.x}-${block.y} {
-            0%, ${startPct}%                { opacity: 1; transform: scale(1); fill: ${color}; }
-            ${hitPct}%, ${respawnPct}%      { opacity: 0; transform: scale(0); }
-            100%                            { opacity: 1; transform: scale(1); }
+            0%, ${startPct}%           { opacity: 1; transform: scale(1); fill: ${color}; }
+            ${hitPct}%, ${respawnPct}% { opacity: 0; transform: scale(0); }
+            100%                       { opacity: 1; transform: scale(1); }
         }`;
 
     const particleAnim = `
@@ -93,55 +87,47 @@ function buildBlockAnimation(block, totalTime) {
             animation: shatter-${block.x}-${block.y} ${totalTime}s infinite linear;
         }
         @keyframes shatter-${block.x}-${block.y} {
-            0%, ${startPct}%    { opacity: 0; transform: translate(0px, 0px) rotate(0deg); }
+            0%, ${startPct}%                            { opacity: 0; transform: translate(${block.xPos}px, ${block.yPos}px) rotate(0deg); }
             ${(parseFloat(startPct) + 0.01).toFixed(2)}% { opacity: 1; }
-            ${hitPct}%          { opacity: 1; transform: translate(${px}px, ${py}px) rotate(${pr}deg); }
-            ${(parseFloat(hitPct) + 1).toFixed(2)}%, 100% { opacity: 0; }
+            ${hitPct}%                                  { opacity: 1; transform: translate(${block.xPos + parseFloat(px)}px, ${block.yPos + parseFloat(py)}px) rotate(${pr}deg); }
+            ${(parseFloat(hitPct) + 1).toFixed(2)}%, 100% { opacity: 0; transform: translate(${block.xPos + parseFloat(px)}px, ${block.yPos + parseFloat(py)}px) rotate(${pr}deg); }
         }`;
 
     return { blockAnim, particleAnim, color };
 }
 
-
-function buildMinerPath(activeTargets, totalTime) {
+function buildMinerPath(activeTargets, totalTime, MOVE_PAUSE) {
     if (activeTargets.length === 0) return '';
 
     let kf = `@keyframes minerPath {\n`;
-    activeTargets.forEach(block => {
-        const pct = ((block.startTime / totalTime) * 100).toFixed(2);
-        kf += `    ${pct}% { transform: translate(${block.xPos - 4}px, ${block.yPos - 12}px); }\n`;
+    activeTargets.forEach((block, i) => {
+        const arriveTime = block.startTime;
+        const nextStart  = activeTargets[i + 1] ? activeTargets[i + 1].startTime : totalTime;
+        const departTime = nextStart - MOVE_PAUSE;
+
+        const arrivePct = ((arriveTime / totalTime) * 100).toFixed(2);
+        const departPct = ((departTime / totalTime) * 100).toFixed(2);
+        const tx = block.xPos - 4;
+        const ty = block.yPos - 12;
+
+        kf += `    ${arrivePct}% { transform: translate(${tx}px, ${ty}px); }\n`;
+        if (departPct !== arrivePct) {
+            kf += `    ${departPct}% { transform: translate(${tx}px, ${ty}px); }\n`;
+        }
     });
-    
     kf += `    100% { transform: translate(${activeTargets[0].xPos - 4}px, ${activeTargets[0].yPos - 12}px); }\n}`;
     return kf;
 }
 
-function buildPickaxeSwing(activeTargets, totalTime) {
-    if (activeTargets.length === 0) {
-        return `@keyframes pickaxeSwing { 0%{transform:rotate(0deg)} 50%{transform:rotate(-65deg)} 100%{transform:rotate(0deg)} }
-                .tool-swing { transform-origin: 8px 15px; animation: pickaxeSwing ${SWING_BASE}s infinite ease-in-out; }`;
-    }
-
+function buildPickaxeSwing(activeTargets) {
     const hardness = { 1: 0.4, 2: 0.7, 3: 1.0, 4: 1.5 };
+    const avgHardness = activeTargets.length
+        ? activeTargets.reduce((s, b) => s + hardness[b.level], 0) / activeTargets.length
+        : 1;
+    const avgDur = (SWING_BASE / avgHardness).toFixed(3);
 
-    let swingKf = `@keyframes pickaxeSwing { 0%{transform:rotate(0deg)} 50%{transform:rotate(-65deg)} 100%{transform:rotate(0deg)} }\n`;
-    let swingAnim = `@keyframes swingDur {\n`;
-
-    activeTargets.forEach(block => {
-        const pct      = ((block.startTime / totalTime) * 100).toFixed(2);
-        const dur      = (SWING_BASE / hardness[block.level]).toFixed(3);
-        swingAnim     += `    ${pct}% { animation-duration: ${dur}s; }\n`;
-    });
-    swingAnim += `    100% { animation-duration: ${SWING_BASE}s; }\n}\n`;
-
-    const avgHardness = activeTargets.reduce((s, b) => s + hardness[b.level], 0) / activeTargets.length;
-    const avgDur      = (SWING_BASE / avgHardness).toFixed(3);
-
-    return `${swingKf}
-        .tool-swing {
-            transform-origin: 8px 15px;
-            animation: pickaxeSwing ${avgDur}s infinite ease-in-out;
-        }`;
+    return `@keyframes pickaxeSwing { 0%{transform:rotate(0deg)} 50%{transform:rotate(-65deg)} 100%{transform:rotate(0deg)} }
+        .tool-swing { transform-origin: 8px 15px; animation: pickaxeSwing ${avgDur}s infinite ease-in-out; }`;
 }
 
 function renderSVG({ gridSVG, particleSVG, styles, svgWidth, svgHeight, totalTime, activeTargets }) {
@@ -151,7 +137,7 @@ function renderSVG({ gridSVG, particleSVG, styles, svgWidth, svgHeight, totalTim
     <style>
         ${styles}
         .miner-engine {
-            animation: minerPath ${totalTime}s infinite steps(1);
+            animation: minerPath ${totalTime}s infinite linear;
         }
     </style>
 
@@ -162,14 +148,10 @@ function renderSVG({ gridSVG, particleSVG, styles, svgWidth, svgHeight, totalTim
 
     <g class="miner-engine" transform="translate(${firstTarget.xPos - 4}, ${firstTarget.yPos - 12})">
         <g>
-            <!-- Körper -->
             <rect x="5" y="10" width="10" height="14" rx="2" fill="#f1c40f" />
-            <!-- Helm -->
             <path d="M4 10 C 4 4, 16 4, 16 10 Z" fill="#e67e22" />
             <rect x="8" y="5" width="4" height="2" fill="#f1c40f" />
-            <!-- Stirnlampe -->
             <polygon points="12,6 25,2 25,14" fill="#f1c40f" opacity="0.12" />
-            <!-- Hacke -->
             <g class="tool-swing">
                 <rect x="6" y="2" width="2" height="14" rx="1" fill="#795548" transform="rotate(30 6 2)" />
                 <path d="M0 2 C 4 0, 10 0, 14 2 L 7 4 Z" fill="#95a5a6" />
@@ -180,7 +162,6 @@ function renderSVG({ gridSVG, particleSVG, styles, svgWidth, svgHeight, totalTim
 }
 
 function generateSmartMiningSVG(data) {
-    const rows       = 7;
     const cols       = data.length;
     const boxSize    = 10;
     const gap        = 3;
@@ -190,13 +171,13 @@ function generateSmartMiningSVG(data) {
     const MOVE_PAUSE  = 0.15;
 
     const svgWidth  = cols * (boxSize + gap) + paddingLeft + 30;
-    const svgHeight = rows * (boxSize + gap) + paddingTop  + 30;
+    const svgHeight = 7 * (boxSize + gap) + paddingTop + 30;
     const colors    = { 0: '#161b22', 1: '#0e4429', 2: '#006d32', 3: '#26a641', 4: '#39d353' };
 
-    let gridSVG     = '';
-    let particleSVG = '';
-    let styles      = '';
-    let totalTime   = 0;
+    let gridSVG      = '';
+    let particleSVG  = '';
+    let styles       = '';
+    let totalTime    = 0;
     let activeTargets = [];
 
     for (let x = 0; x < cols; x++) {
@@ -212,27 +193,22 @@ function generateSmartMiningSVG(data) {
                 activeTargets.push({ x, y, xPos, yPos, level, startTime: totalTime, endTime: totalTime + duration });
                 totalTime += duration + MOVE_PAUSE;
             } else {
-                // Leere Blöcke: statisch, keine Animation
                 gridSVG += `<rect x="${xPos}" y="${yPos}" width="${boxSize}" height="${boxSize}" rx="1.5" fill="${colors[0]}" />\n`;
             }
         }
     }
 
-    // Fallback: 0 Commits
     if (activeTargets.length === 0) {
         totalTime = 5;
         styles += `@keyframes minerPath { 0%, 100% { transform: translate(${paddingLeft}px, ${paddingTop}px); } }`;
     }
 
-    // 2. Animationen pro Block generieren
     activeTargets.forEach(block => {
         const { blockAnim, particleAnim, color } = buildBlockAnimation(block, totalTime);
-        styles      += blockAnim + particleAnim;
-
-        gridSVG     += `<rect class="b-${block.x}-${block.y}" x="${block.xPos}" y="${block.yPos}" width="${boxSize}" height="${boxSize}" rx="1.5" fill="${color}" />\n`;
-
+        styles     += blockAnim + particleAnim;
+        gridSVG    += `<rect class="b-${block.x}-${block.y}" x="${block.xPos}" y="${block.yPos}" width="${boxSize}" height="${boxSize}" rx="1.5" fill="${color}" />\n`;
         particleSVG += `
-            <g class="p-${block.x}-${block.y}" transform="translate(${block.xPos}, ${block.yPos})">
+            <g class="p-${block.x}-${block.y}">
                 <rect x="1" y="1" width="3" height="3" fill="${color}" />
                 <rect x="6" y="1" width="3" height="3" fill="${color}" />
                 <rect x="1" y="6" width="3" height="3" fill="${color}" />
@@ -240,22 +216,20 @@ function generateSmartMiningSVG(data) {
             </g>`;
     });
 
-    // 3. Miner-Pfad + Hackenschwung
-    styles += buildMinerPath(activeTargets, totalTime);
-    styles += buildPickaxeSwing(activeTargets, totalTime);
+    styles += buildMinerPath(activeTargets, totalTime, MOVE_PAUSE);
+    styles += buildPickaxeSwing(activeTargets);
 
     return renderSVG({ gridSVG, particleSVG, styles, svgWidth, svgHeight, totalTime, activeTargets });
 }
 
-// --- Entry Point ---
 async function main() {
     try {
         const commitData = await getContributions();
         const svgContent = generateSmartMiningSVG(commitData);
         fs.writeFileSync('mining-grid.svg', svgContent);
-        console.log('💎 Mining-Grid erfolgreich generiert!');
+        console.log('Mining grid generated successfully.');
     } catch (error) {
-        console.error('Fehler:', error.message);
+        console.error('Error:', error.message);
         process.exit(1);
     }
 }
